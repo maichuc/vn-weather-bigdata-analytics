@@ -1,0 +1,4 @@
+# Tầng 1 – Data Source Layer
+# Thư viện Python cần thiết cho data_generator.py
+
+requests==2.31.0

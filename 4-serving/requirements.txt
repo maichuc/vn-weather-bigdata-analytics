@@ -1,0 +1,16 @@
+# =============================================================================
+# TẦNG 4: SERVING LAYER – FastAPI Python dependencies
+# =============================================================================
+
+# Web framework
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+
+# HTTP client (đọc WebHDFS REST API)
+httpx==0.27.0
+
+# Data validation (strict typing)
+pydantic==2.7.0
+
+# Đọc file CSV
+# (csv module có sẵn trong stdlib, không cần cài thêm)

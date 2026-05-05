@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!--
+    core-site.xml – Cấu hình HDFS Namenode cho Hadoop client
+    File này cần thiết để Spark biết kết nối tới HDFS nào.
+    Được copy vào HADOOP_CONF_DIR trong container spark-analytics.
+-->
+<configuration>
+    <!-- Địa chỉ HDFS NameNode – khớp với tên service trong docker-compose -->
+    <property>
+        <name>fs.defaultFS</name>
+        <value>hdfs://namenode:9000</value>
+        <description>Địa chỉ HDFS NameNode (hostname:port)</description>
+    </property>
+
+    <!-- Cho phép WebHDFS REST API -->
+    <property>
+        <name>dfs.webhdfs.enabled</name>
+        <value>true</value>
+    </property>
+
+    <!-- Tắt permission check cho môi trường lab -->
+    <property>
+        <name>hadoop.security.authentication</name>
+        <value>simple</value>
+    </property>
+</configuration>

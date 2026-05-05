@@ -1,0 +1,17 @@
+# =============================================================================
+# TẦNG 5: VISUALIZATION LAYER – Plotly Dash Python dependencies
+# =============================================================================
+
+# Dash framework
+dash==2.17.0
+dash-bootstrap-components==1.6.0
+
+# Plotly (đã có sẵn khi cài dash, thêm rõ ràng cho version pin)
+plotly==5.22.0
+pandas==2.2.2
+
+# HTTP client gọi FastAPI
+requests==2.31.0
+
+# WSGI server cho production
+gunicorn==22.0.0
