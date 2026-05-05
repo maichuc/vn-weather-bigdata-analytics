@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!--
+    yarn-site.xml – Cấu hình YARN ResourceManager và NodeManager
+    File này cần thiết để Spark biết kết nối tới YARN cluster nào.
+    Được copy vào HADOOP_CONF_DIR / YARN_CONF_DIR trong container.
+-->
+<configuration>
+    <!-- Địa chỉ YARN ResourceManager – điều phối tài nguyên cluster -->
+    <property>
+        <name>yarn.resourcemanager.hostname</name>
+        <value>resourcemanager</value>
+        <description>Hostname của YARN ResourceManager (khớp với docker-compose service name)</description>
+    </property>
+
+    <!-- Địa chỉ đầy đủ của ResourceManager -->
+    <property>
+        <name>yarn.resourcemanager.address</name>
+        <value>resourcemanager:8032</value>
+    </property>
+
+    <!-- ResourceManager Scheduler port -->
+    <property>
+        <name>yarn.resourcemanager.scheduler.address</name>
+        <value>resourcemanager:8030</value>
+    </property>
+
+    <!-- ResourceManager Resource Tracker port (NodeManager báo cáo về đây) -->
+    <property>
+        <name>yarn.resourcemanager.resource-tracker.address</name>
+        <value>resourcemanager:8031</value>
+    </property>
+
+    <!-- ResourceManager Admin port -->
+    <property>
+        <name>yarn.resourcemanager.admin.address</name>
+        <value>resourcemanager:8033</value>
+    </property>
+
+    <!-- ResourceManager Web UI -->
+    <property>
+        <name>yarn.resourcemanager.webapp.address</name>
+        <value>resourcemanager:8088</value>
+    </property>
+
+    <!-- Auxiliary service của MapReduce (cần cho Spark shuffle) -->
+    <property>
+        <name>yarn.nodemanager.aux-services</name>
+        <value>mapreduce_shuffle</value>
+    </property>
+
+    <property>
+        <name>yarn.nodemanager.aux-services.mapreduce.shuffle.class</name>
+        <value>org.apache.hadoop.mapred.ShuffleHandler</value>
+    </property>
+
+    <!-- Cho phép container chạy với user bất kỳ (môi trường lab) -->
+    <property>
+        <name>yarn.nodemanager.container-executor.class</name>
+        <value>org.apache.hadoop.yarn.server.nodemanager.DefaultContainerExecutor</value>
+    </property>
+
+    <!-- Tổng bộ nhớ mỗi NodeManager có thể cấp phát (MB) -->
+    <property>
+        <name>yarn.nodemanager.resource.memory-mb</name>
+        <value>4096</value>
+        <description>4GB RAM cho mỗi NodeManager (phù hợp môi trường lab)</description>
+    </property>
+
+    <!-- Số vCPU mỗi NodeManager -->
+    <property>
+        <name>yarn.nodemanager.resource.cpu-vcores</name>
+        <value>4</value>
+    </property>
+
+    <!-- Bộ nhớ tối thiểu mỗi Container (MB) -->
+    <property>
+        <name>yarn.scheduler.minimum-allocation-mb</name>
+        <value>256</value>
+    </property>
+
+    <!-- Bộ nhớ tối đa mỗi Container (MB) -->
+    <property>
+        <name>yarn.scheduler.maximum-allocation-mb</name>
+        <value>2048</value>
+    </property>
+
+    <!-- Kiểm tra bộ nhớ ảo (tắt để tránh lỗi trong Docker) -->
+    <property>
+        <name>yarn.nodemanager.vmem-check-enabled</name>
+        <value>false</value>
+    </property>
+
+    <!-- Kiểm tra bộ nhớ vật lý -->
+    <property>
+        <name>yarn.nodemanager.pmem-check-enabled</name>
+        <value>false</value>
+    </property>
+</configuration>
