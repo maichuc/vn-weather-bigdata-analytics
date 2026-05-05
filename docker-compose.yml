@@ -1,0 +1,324 @@
+# =============================================================================
+# ORCHESTRATION LAYER – Docker Compose (Python-only Stack)
+# File: docker-compose.yml
+# Mục đích: Đóng gói và điều phối TOÀN BỘ Data Pipeline 6 tầng.
+# =============================================================================
+
+networks:
+  bigdata-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  namenode-data:
+  datanode-data:
+  hive-metastore-data:
+  shared-log-data:
+  spark-output:
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # STORAGE: HDFS NameNode
+  # ---------------------------------------------------------------------------
+  namenode:
+    image: apache/hadoop:3.3.5
+    container_name: lab10-namenode
+    hostname: namenode
+    command: ["/bin/bash", "-c", "sudo chown -R hadoop:users /hadoop/dfs/name && if [ ! -d /hadoop/dfs/name/current ]; then /opt/hadoop/bin/hdfs namenode -format -force -clusterid lab10-cluster; fi && /opt/hadoop/bin/hdfs namenode"]
+    environment:
+      ENSURE_NAMENODE_DIR: /hadoop/dfs/name
+      CLUSTER_NAME: lab10-cluster
+      CORE-SITE.XML_fs.defaultFS: hdfs://namenode:9000
+      CORE-SITE.XML_hadoop.http.staticuser.user: root
+      HDFS-SITE.XML_dfs.replication: 1
+      HDFS-SITE.XML_dfs.namenode.name.dir: /hadoop/dfs/name
+      HDFS-SITE.XML_dfs.permissions.enabled: "false"
+      HDFS-SITE.XML_dfs.webhdfs.enabled: "true"
+    ports:
+      - "9870:9870"
+      - "9001:9000"
+    volumes:
+      - namenode-data:/hadoop/dfs/name
+    networks:
+      bigdata-net:
+        ipv4_address: 172.20.0.10
+    healthcheck:
+      test: ["CMD-SHELL", "hdfs dfsadmin -report || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # STORAGE: HDFS DataNode
+  # ---------------------------------------------------------------------------
+  datanode:
+    image: apache/hadoop:3.3.5
+    container_name: lab10-datanode
+    hostname: datanode
+    command: ["/bin/bash", "-c", "sudo chown -R hadoop:users /hadoop/dfs/data && /opt/hadoop/bin/hdfs datanode"]
+    environment:
+      CORE-SITE.XML_fs.defaultFS: hdfs://namenode:9000
+      HDFS-SITE.XML_dfs.datanode.data.dir: /hadoop/dfs/data
+      HDFS-SITE.XML_dfs.replication: 1
+      HDFS-SITE.XML_dfs.permissions.enabled: "false"
+    ports:
+      - "9864:9864"
+    volumes:
+      - datanode-data:/hadoop/dfs/data
+    depends_on:
+      namenode:
+        condition: service_healthy
+    networks:
+      bigdata-net:
+        ipv4_address: 172.20.0.11
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # YARN: ResourceManager
+  # ---------------------------------------------------------------------------
+  resourcemanager:
+    image: apache/hadoop:3.3.5
+    container_name: lab10-resourcemanager
+    hostname: resourcemanager
+    command: ["yarn", "resourcemanager"]
+    environment:
+      CLUSTER_NAME: lab10-cluster
+      CORE-SITE.XML_fs.defaultFS: hdfs://namenode:9000
+      YARN-SITE.XML_yarn.resourcemanager.hostname: resourcemanager
+      YARN-SITE.XML_yarn.resourcemanager.address: resourcemanager:8032
+      YARN-SITE.XML_yarn.resourcemanager.scheduler.address: resourcemanager:8030
+      YARN-SITE.XML_yarn.resourcemanager.resource-tracker.address: resourcemanager:8031
+      YARN-SITE.XML_yarn.resourcemanager.webapp.address: resourcemanager:8088
+      YARN-SITE.XML_yarn.nodemanager.aux-services: mapreduce_shuffle
+      YARN-SITE.XML_yarn.nodemanager.vmem-check-enabled: "false"
+      YARN-SITE.XML_yarn.nodemanager.pmem-check-enabled: "false"
+      YARN-SITE.XML_yarn.scheduler.minimum-allocation-mb: 256
+      YARN-SITE.XML_yarn.scheduler.maximum-allocation-mb: 2048
+    ports:
+      - "8088:8088"
+      - "8032:8032"
+    depends_on:
+      namenode:
+        condition: service_healthy
+    networks:
+      bigdata-net:
+        ipv4_address: 172.20.0.15
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://resourcemanager:8088/ws/v1/cluster/info || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # YARN: NodeManager
+  # ---------------------------------------------------------------------------
+  nodemanager:
+    image: apache/hadoop:3.3.5
+    container_name: lab10-nodemanager
+    hostname: nodemanager
+    command: ["yarn", "nodemanager"]
+    environment:
+      CORE-SITE.XML_fs.defaultFS: hdfs://namenode:9000
+      YARN-SITE.XML_yarn.resourcemanager.hostname: resourcemanager
+      YARN-SITE.XML_yarn.resourcemanager.address: resourcemanager:8032
+      YARN-SITE.XML_yarn.nodemanager.aux-services: mapreduce_shuffle
+      YARN-SITE.XML_yarn.nodemanager.aux-services.mapreduce_shuffle.class: org.apache.hadoop.mapred.ShuffleHandler
+      YARN-SITE.XML_yarn.nodemanager.resource.memory-mb: 4096
+      YARN-SITE.XML_yarn.nodemanager.resource.cpu-vcores: 4
+      YARN-SITE.XML_yarn.nodemanager.vmem-check-enabled: "false"
+      YARN-SITE.XML_yarn.nodemanager.pmem-check-enabled: "false"
+    ports:
+      - "8042:8042"
+    depends_on:
+      resourcemanager:
+        condition: service_healthy
+    networks:
+      bigdata-net:
+        ipv4_address: 172.20.0.16
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # STORAGE: Hive Metastore
+  # ---------------------------------------------------------------------------
+  hive-metastore:
+    image: apache/hive:3.1.3
+    container_name: lab10-hive-metastore
+    hostname: hive-metastore
+    environment:
+      SERVICE_NAME: metastore
+      DB_DRIVER: derby
+      HIVE_METASTORE_URI: thrift://hive-metastore:9083
+      HIVE_CONF_hive_metastore_warehouse_dir: hdfs://namenode:9000/user/hive/warehouse
+    ports:
+      - "9083:9083"
+    volumes:
+      - hive-metastore-data:/opt/hive/data/warehouse
+    depends_on:
+      namenode:
+        condition: service_healthy
+    networks:
+      bigdata-net:
+        ipv4_address: 172.20.0.12
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # DATA SOURCE: Python Data Generator
+  # ---------------------------------------------------------------------------
+  data-generator:
+    build:
+      context: ./1-data-source
+      dockerfile: Dockerfile
+    container_name: lab10-data-generator
+    hostname: data-generator
+    volumes:
+      - shared-log-data:/data
+    environment:
+      OPENWEATHERMAP_API_KEY: ${OPENWEATHERMAP_API_KEY}
+      OUTPUT_FILE: /data/weather_data.json
+    networks:
+      bigdata-net:
+        ipv4_address: 172.20.0.30
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # INGESTION: Batch Ingestion (HDFS CLI)
+  # ---------------------------------------------------------------------------
+  ingestion:
+    image: apache/hadoop:3.3.5
+    container_name: lab10-ingestion
+    hostname: ingestion
+    user: "root"
+    command: ["/bin/bash", "/scripts/ingest.sh"]
+    environment:
+      CORE-SITE.XML_fs.defaultFS: hdfs://namenode:9000
+    volumes:
+      - shared-log-data:/data
+      - ./2-ingestion/ingest.sh:/scripts/ingest.sh:ro
+    depends_on:
+      namenode:
+        condition: service_healthy
+      data-generator:
+        condition: service_started
+    networks:
+      bigdata-net:
+        ipv4_address: 172.20.0.31
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # PROCESSING: MapReduce Job (Java)
+  # ---------------------------------------------------------------------------
+  mapreduce:
+    build:
+      context: ./3-processing/mapreduce
+      dockerfile: Dockerfile
+    container_name: lab10-mapreduce
+    hostname: mapreduce
+    environment:
+      CORE-SITE.XML_fs.defaultFS: hdfs://namenode:9000
+      YARN-SITE.XML_yarn.resourcemanager.address: resourcemanager:8032
+      MAPRED-SITE.XML_mapreduce.framework.name: yarn
+    volumes:
+      - spark-output:/data/spark-output
+    depends_on:
+      namenode:
+        condition: service_healthy
+      resourcemanager:
+        condition: service_healthy
+      nodemanager:
+        condition: service_started
+      ingestion:
+        condition: service_started
+    networks:
+      bigdata-net:
+        ipv4_address: 172.20.0.40
+    restart: on-failure
+
+  # ---------------------------------------------------------------------------
+  # PROCESSING: PySpark Analytics trên YARN
+  # ---------------------------------------------------------------------------
+  spark-analytics:
+    build:
+      context: ./3-processing/spark
+      dockerfile: Dockerfile
+    container_name: lab10-spark-analytics
+    hostname: spark-analytics
+    entrypoint: ["/bin/bash", "-c", "sleep 10 && /app/run_spark_yarn.sh"]
+    environment:
+      HIVE_METASTORE_URI: thrift://hive-metastore:9083
+    volumes:
+      - spark-output:/data/spark-output
+    depends_on:
+      namenode:
+        condition: service_healthy
+      resourcemanager:
+        condition: service_healthy
+      nodemanager:
+        condition: service_started
+      hive-metastore:
+        condition: service_started
+      ingestion:
+        condition: service_started
+    networks:
+      bigdata-net:
+        ipv4_address: 172.20.0.41
+    restart: on-failure
+
+  # ---------------------------------------------------------------------------
+  # SERVING: FastAPI (Python)
+  # ---------------------------------------------------------------------------
+  fastapi:
+    build:
+      context: ./4-serving
+      dockerfile: Dockerfile
+    container_name: lab10-fastapi
+    hostname: fastapi
+    environment:
+      PORT: 4000
+      SPARK_OUTPUT_PATH: /data/spark-output
+      WEBHDFS_URL: http://namenode:9870
+      CACHE_TTL: 30
+    ports:
+      - "4000:4000"
+    volumes:
+      - spark-output:/data/spark-output:ro
+    depends_on:
+      - spark-analytics
+    networks:
+      bigdata-net:
+        ipv4_address: 172.20.0.50
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # VISUALIZATION: Plotly Dash (Python)
+  # ---------------------------------------------------------------------------
+  plotly-dashboard:
+    build:
+      context: ./5-visualization
+      dockerfile: Dockerfile
+    container_name: lab10-plotly-dashboard
+    hostname: plotly-dashboard
+    environment:
+      FASTAPI_URL: http://fastapi:4000
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      fastapi:
+        condition: service_healthy
+    networks:
+      bigdata-net:
+        ipv4_address: 172.20.0.51
+    restart: unless-stopped
